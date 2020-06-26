@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Wanda Eats</title>
+    <style>
+      body { background: #f3f3f3 }
+      .offset { margin: 0 1em }
+      .outer { width: 100% } 
+      .inner { margin: 0 auto; width: 30% }
+      .progress { width: 30% }
+      .button-group { text-align: center; width: 100%; height: 2rem }
+      .predict-results { position:absolute; top: 0; left: 0; width: 35%; z-index:100 }
+      .drop-zone { margin-top: 1rem; border: 0.2rem solid black; text-align: center; width: 100%; height: 90vh; overflow: auto }
+    </style>
+  </head>
+  <body id="body">
+    <div class="outer">
+      <div class="inner">
+        <div id="button-group" class="button-group">
+          <span class="offset"><button disabled id="yuck-button">Yuck!</button></span>
+          <button disabled id="predict-button">Predict</button>
+          <button id="clear-button">Clear</button>
+          <span class="offset"><button disabled id="yum-button">Yum!</button></span>
+          <div id="progress"><progress id="progress" class="progress"></progress></div>
+        </div>
+        <div id="predict-results" class="predict-results"></div>
+      </div>
+    </div>
+    
+    <div class="drop-zone">
+      <p id="drop-zone-message">Drag an image file here.</p>
+      <div id="gallery" class="gallery"></div>
+    </div>
+    <script src="https://unpkg.com/ml5@0.5.0/dist/ml5.min.js"></script>
+    <script>
+      const predict = document.getElementById('predict-button');
+      const yuck = document.getElementById('yuck-button');
+      const yum = document.getElementById('yum-button');
+      const predictResults = document.getElementById('predict-results');
+      const dropZone = document.getElementById('body');  
+      dropZone.addEventListener('drop', dropHandler);
+      dropZone.addEventListener('dragover', dragOverHandler);
+
+      function dropHandler(ev) {
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+
+        if (ev.dataTransfer.files.length) {
+          predictResults.innerHTML = '';
+          appendToGallery(ev.dataTransfer.files[0]);
+        }
+      }
+
+      function dragOverHandler(ev) {
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+      }
+
+      const gallery = document.getElementById('gallery');
+
+      function appendToGallery(file) {
+        let reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onloadend = function() {
+          let img = document.createElement('img');
+          img.src = reader.result;
+          gallery.innerHTML = '';
+          gallery.appendChild(img);
+          // Should be .modelLoaded below but there's a bug I think?
+          // 
+          if (classifier.model) { 
+            enableButtons();
+          }
+        };
+      }
+
+      function enableButtons() {
+        predict.disabled = false;
+        yuck.disabled = false;
+        yum.disabled = false;
+      }
+
+      function disableButtons() {
+        predict.disabled = true;
+        yuck.disabled = true;
+        yum.disabled = true;
+      }
+
+      const clear = document.getElementById('clear-button');
+
+      clear.addEventListener('click', () => {
+        predictResults.innerHTML = '';
+        gallery.innerHTML = '';
+        disableButtons();
+      })
+
+      const classifier = ml5.imageClassifier('MobileNet', modelLoaded);
+
+      function modelLoaded() {
+        document.getElementById('progress').remove();
+
+        predict.addEventListener('click', () => {
+          const img = document.getElementById('gallery').firstChild;
+          disableButtons();
+          classifier.classify(img, (err, results) => {
+            if (err) {
+              enableButtons();
+              return predictResults.innerHTML = `<p>${err.toString()}</p>`;
+            }
+            let resultsHtml = '<ul>';
+            for (let result of results) {
+              resultsHtml += `<li>${result.label}: ${result.confidence}</li>`;
+            }
+            resultsHtml += '</ul';
+            predictResults.innerHTML = resultsHtml;
+            enableButtons();
+          });
+        });
+        if (document.getElementById('gallery').firstChild) {
+          enableButtons();
+        }
+      }
+    </script>
+  </body>
+</html>
