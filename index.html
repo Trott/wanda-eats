@@ -108,7 +108,7 @@
             }
             let resultsHtml = '<ul>';
             for (let result of results) {
-              resultsHtml += `<li>${result.label}: ${result.confidence}</li>`;
+              resultsHtml += `<li>${result.label}: ${parseFloat(result.confidence * 100).toFixed(4)}%</li>`;
             }
             resultsHtml += '</ul';
             predictResults.innerHTML = resultsHtml;
