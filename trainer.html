@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Wanda Eats</title>
+    <style>
+      body { background: #f3f3f3 }
+      .offset { margin: 0 1em }
+      .outer { width: 100% } 
+      .inner { margin: 0 auto; width: 40% }
+      .progress { width: 30% }
+      .button-group { text-align: center; width: 100%; height: 2rem }
+      .predict-results { position:absolute; top: 0; left: 0; width: 35%; z-index:100 }
+      .drop-zone { margin-top: 1rem; border: 0.2rem solid black; text-align: center; width: 100%; height: 90vh; overflow: auto }
+    </style>
+  </head>
+  <body id="body">
+    <div class="outer">
+      <div class="inner">
+        <div id="button-group" class="button-group">
+          <span class="offset"><button disabled id="yuck-button">Yuck!</button></span>
+          <button disabled id="predict-button">Predict</button>
+          <button id="clear-button">Clear</button>
+          <button id="train-button">Train</button>
+          <button id="save-button" disabled>Save</button>
+          <span class="offset"><button disabled id="yum-button">Yum!</button></span>
+          <div id="progress"><progress id="progress" class="progress"></progress></div>
+        </div>
+        <div id="predict-results" class="predict-results"></div>
+      </div>
+    </div>
+    
+    <div class="drop-zone">
+      <p id="drop-zone-message">Drag an image file or a folder of image files here.</p>
+      <div id="gallery" class="gallery"></div>
+    </div>
+    <script src="https://unpkg.com/ml5@0.5.0/dist/ml5.min.js"></script>
+    <script>
+      let trained = false;
+      const predict = document.getElementById('predict-button');
+      const save = document.getElementById('save-button');
+      const yuck = document.getElementById('yuck-button');
+      const yum = document.getElementById('yum-button');
+      const train = document.getElementById('train-button');
+      const predictResults = document.getElementById('predict-results');
+      const dropZone = document.getElementById('body');  
+      dropZone.addEventListener('drop', dropHandler);
+      dropZone.addEventListener('dragover', dragOverHandler);
+
+      function dropHandler(ev) {
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+
+        if (ev.dataTransfer.files.length) {
+          predictResults.innerHTML = '';
+          appendToGallery(ev.dataTransfer.files);
+        }
+      }
+
+      function dragOverHandler(ev) {
+        // Prevent default behavior (Prevent file from being opened)
+        ev.preventDefault();
+      }
+
+      const gallery = document.getElementById('gallery');
+
+      function appendToGallery(files) {
+        gallery.innerHTML = '';
+        for (let i=0; i<files.length; i++) {
+          const file = files[i];
+          let reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onloadend = function() {
+            let img = document.createElement('img');
+            img.src = reader.result;
+            gallery.appendChild(img);
+          }
+        }
+        // Should be .modelLoaded below but there's a bug I think?
+        // 
+        if (classifier.model) { 
+          enableButtons();
+        }
+      }
+
+      function enableButtons() {
+        if (trained) {
+          predict.disabled = false;
+          save.disabled = false;
+        }
+        yuck.disabled = false;
+        yum.disabled = false;
+      }
+
+      function disableButtons() {
+        predict.disabled = true;
+        yuck.disabled = true;
+        yum.disabled = true;
+      }
+
+      const clear = document.getElementById('clear-button');
+
+      clear.addEventListener('click', () => {
+        predictResults.innerHTML = '';
+        gallery.innerHTML = '';
+        disableButtons();
+      })
+
+      const mobilenet = ml5.featureExtractor('MobileNet', modelLoaded);
+      const classifier = mobilenet.classification();
+
+      function modelLoaded() {
+        document.getElementById('progress').remove();
+
+        yuck.addEventListener('click', () => {
+          const imgs = getImages();
+          for (const img of imgs) {
+            console.log('Adding an image to yuck collection.');
+            classifier.addImage(img, 'yuck');
+          }
+        });
+
+        yum.addEventListener('click', () => {
+          const imgs = getImages();
+          for (const img of imgs) {
+            console.log('Adding an image to yum collection.')
+            classifier.addImage(img, 'yum');
+          }
+        });
+
+        train.addEventListener('click', () => {
+          classifier.train((loss) => {
+            if (loss === null) {
+              console.log('Training finished!');
+              trained = true;
+              enableButtons();
+            } else {
+              console.log(loss);
+            }
+          });
+        });
+
+        save.addEventListener('click', () => {
+          classifier.save();
+        })
+
+        function getImage() {
+          return document.getElementById('gallery').firstChild;
+        }
+
+        function getImages() {
+          return document.getElementById('gallery').getElementsByTagName("img");
+        }
+
+        predict.addEventListener('click', () => {
+          const img = getImage();
+          disableButtons();
+          classifier.classify(img, (err, results) => {
+            if (err) {
+              enableButtons();
+              return predictResults.innerHTML = `<p>${err.toString()}</p>`;
+            }
+            let resultsHtml = '<ul>';
+            for (let result of results) {
+              resultsHtml += `<li>${result.label}: ${result.confidence}</li>`;
+            }
+            resultsHtml += '</ul';
+            predictResults.innerHTML = resultsHtml;
+            enableButtons();
+          });
+        });
+        if (document.getElementById('gallery').firstChild) {
+          enableButtons();
+        }
+      }
+    </script>
+  </body>
+</html>
