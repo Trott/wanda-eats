@@ -11,30 +11,28 @@
       .inner { margin: 0 auto; width: 30% }
       .progress { width: 30% }
       .button-group { text-align: center; width: 100%; height: 2rem }
-      .predict-results { position:absolute; top: 0; left: 0; width: 35%; z-index:100 }
       .drop-zone { margin-top: 1rem; border: 0.2rem solid black; text-align: center; width: 100%; height: 90vh; overflow: auto }
+      .gallery-image-container { margin: 1rem }
     </style>
   </head>
   <body id="body">
     <div class="outer">
       <div class="inner">
         <div id="button-group" class="button-group">
-          <button disabled id="predict-button">Predict</button>
+          <button disabled id="predict-button">Score</button>
           <button id="clear-button">Clear</button>
           <div id="progress"><progress id="progress" class="progress"></progress></div>
         </div>
-        <div id="predict-results" class="predict-results"></div>
       </div>
     </div>
     
     <div class="drop-zone">
-      <p id="drop-zone-message">Drag an image file here.</p>
+      <p id="drop-zone-message">Drag images here.</p>
       <div id="gallery" class="gallery"></div>
     </div>
     <script src="https://unpkg.com/ml5@0.5.0/dist/ml5.min.js"></script>
     <script>
       const predict = document.getElementById('predict-button');
-      const predictResults = document.getElementById('predict-results');
       const dropZone = document.getElementById('body');  
       dropZone.addEventListener('drop', dropHandler);
       dropZone.addEventListener('dragover', dragOverHandler);
@@ -44,8 +42,7 @@
         ev.preventDefault();
 
         if (ev.dataTransfer.files.length) {
-          predictResults.innerHTML = '';
-          appendToGallery(ev.dataTransfer.files[0]);
+          appendToGallery(ev.dataTransfer.files);
         }
       }
 
@@ -56,20 +53,26 @@
 
       const gallery = document.getElementById('gallery');
 
-      function appendToGallery(file) {
-        let reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onloadend = function() {
-          let img = document.createElement('img');
-          img.src = reader.result;
-          gallery.innerHTML = '';
-          gallery.appendChild(img);
-          // Should be .modelLoaded below but there's a bug I think?
-          // 
-          if (classifier.model) { 
-            enableButtons();
+      function appendToGallery(files) {
+        gallery.innerHTML = '';
+        for (let i=0; i<files.length; i++) {
+          const file = files[i];
+          const reader = new FileReader();
+          reader.readAsDataURL(file);
+          reader.onloadend = function() {
+            const div = document.createElement('div');
+            div.setAttribute('class', 'gallery-image-container');
+            const img = document.createElement('img');
+            img.src = reader.result;
+            div.appendChild(img);
+            gallery.appendChild(div);
           }
-        };
+        }
+        // Should be .modelLoaded below but there's a bug I think?
+        //
+        if (classifier.model) {
+          enableButtons();
+        }
       }
 
       function enableButtons() {
@@ -83,7 +86,6 @@
       const clear = document.getElementById('clear-button');
 
       clear.addEventListener('click', () => {
-        predictResults.innerHTML = '';
         gallery.innerHTML = '';
         disableButtons();
       })
@@ -99,22 +101,31 @@
         document.getElementById('progress').remove();
 
         predict.addEventListener('click', () => {
-          const img = document.getElementById('gallery').firstChild;
           disableButtons();
-          classifier.classify(img, (err, results) => {
-            if (err) {
-              enableButtons();
-              return predictResults.innerHTML = `<p>${err.toString()}</p>`;
-            }
-            let resultsHtml = '<ul>';
-            for (let result of results) {
-              resultsHtml += `<li>${result.label}: ${parseFloat(result.confidence * 100).toFixed(4)}%</li>`;
-            }
-            resultsHtml += '</ul';
-            predictResults.innerHTML = resultsHtml;
-            enableButtons();
+          const containers = document.getElementById('gallery').querySelectorAll('.gallery-image-container');
+          let remaining = containers.length;
+          containers.forEach((container) => {
+            const img = container.querySelector('img');
+            classifier.classify(img, (err, results) => {
+              let resultsHtml = document.createElement('div');
+              if (err) {
+                resultsHtml.innerHTML = err.toString();
+              } else {
+                const result = results.find((result) => result.label === 'yum');
+                const yumScore = parseFloat(result.confidence * 10000).toFixed(4);
+                container.score = result.confidence;
+                resultsHtml.innerHTML += `Yum score: ${yumScore}`;
+              }
+              img.before(resultsHtml);
+              if (--remaining === 0) {
+                [...gallery.children]
+                  .sort((a,b)=>a.score<b.score?1:-1)
+                  .forEach(node=>gallery.appendChild(node))
+              }
+            });
           });
         });
+        
         if (document.getElementById('gallery').firstChild) {
           enableButtons();
         }
